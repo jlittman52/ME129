@@ -529,8 +529,12 @@ if __name__ == "__main__":
                     
                 else:
                     motors.setvel(0,0)
-                    lo = int(input("enter target long: "))
-                    la = int(input("enter target lat: "))
+                    coord = input("Enter target coordinates in the form (long, lat): ")
+                    res = [int(i) for i in coord.split() if i.isdigit()]
+                    lo = res[0]
+                    la = res[1]
+                    #lo = int(input("enter target long: "))
+                    #la = int(input("enter target lat: "))
                     if intersection(lo, la) == None:
                         raise Exception("No intersections at (%2d,%2d)" %(lo, la))
                     
