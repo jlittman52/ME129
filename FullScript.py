@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
-# 
+#!/usr/bin/env python
+#
 #   Ultrasonic.py adds an ultrasonic class
 #
-# 
+#
 
 # Imports
 import pigpio
@@ -61,12 +61,12 @@ rise_ticks = 0
 dtick = 0
 triggering_stopflag = False
 driving_stopflag = False
-
-pausedriving = False
+driving_pause = False
 exploreflag = True
 
+cur_dist = [0, 0, 0]
+mindist = 15
 
-cur_dist = [0,0,0]
 
 class Intersection:
     # Initialize - create new intersection at (long, let)
@@ -78,6 +78,7 @@ class Intersection:
         self.streets = [UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN]
         # Direction to head from this intersection in planned move.
         self.headingToTarget = None
+        self.blocked = [False, False, False, False] # in NWSE, will only be true if street exits and its blocked
         # You are welcome to implement an arbitrary number of
         # "neighbors" to more directly match a general graph.
         # But the above should be sufficient for a regular grid.
@@ -98,10 +99,6 @@ class Intersection:
 class Ultrasonic:
 
     def __init__(self, io, trig, echo, sens_dir):
-#         if not self.io.connected:
-#             print("Unable to connection to pigpio daemon!")
-#             sys.exit(0)
-
         # Set up the two pins as output/input.
         io.set_mode(trig, pigpio.OUTPUT)
         io.set_mode(echo, pigpio.INPUT)
@@ -109,7 +106,7 @@ class Ultrasonic:
         # Set up the callbacks.
         self.cbrise = io.callback(echo, pigpio.RISING_EDGE, self.rising)
         self.cbfall = io.callback(echo, pigpio.FALLING_EDGE, self.falling)
-        
+
         self.trig = trig
         self.echo = echo
         self.curr_distance = 0
@@ -123,11 +120,11 @@ class Ultrasonic:
         global dtick
         global cur_dist
         dtick = tick - rise_ticks
-        #if dtick < 0:
-         #   dtick += (1 << 32)
-        self.curr_distance = 343.0 / 2.0 * dtick * 10.0**(-4.0)
-        cur_dist[self.sens_dir-1] = self.curr_distance
-        
+        # if dtick < 0:
+        #   dtick += (1 << 32)
+        self.curr_distance = 343.0 / 2.0 * dtick * 10.0 ** (-4.0)
+        cur_dist[self.sens_dir - 1] = self.curr_distance
+
     def trigger(self):
         global last_trigger
         self.io.write(self.trig, 0)
@@ -136,8 +133,6 @@ class Ultrasonic:
         time.sleep(0.000020)
         self.io.write(self.trig, 0)
         last_trigger = time.time
-        
-        
 
     def shutdown(self):
         self.cbrise.cancel()
@@ -269,7 +264,7 @@ class Motor:
             PWM_R = -PWM_fwd + PWM_spin
 
         # print(PWM_L, PWM_R)
-        self.set(PWM_L, PWM_R)
+        motors.set(PWM_L, PWM_R)
 
     def ircheck(self):
         return self.io.read(IR_LEFT) * 4 + self.io.read(IR_MIDDLE) * 2 + self.io.read(IR_RIGHT)
@@ -295,7 +290,7 @@ class Motor:
     # drive forward until you see an intersection
     def drive(self):
         ir_old = self.ircheck()
-        while True:
+        while cur_dist[1] > mindist:
             # read sensors
             ir_curr = self.ircheck()
 
@@ -303,21 +298,25 @@ class Motor:
                 self.setvel(0.25, 0)
 
             elif (ir_old == 2 or ir_old == 3) and ir_curr == 3:  # drifted left
-                self.setvel(0.3, 60)
+                self.setvel(0.3, 40)
 
             elif (ir_old == 2 or ir_old == 6) and ir_curr == 6:  # drifted right
-                self.setvel(0.3, -60)
+                self.setvel(0.3, -40)
 
             elif (ir_old == 2 or ir_old == 3 or ir_old == 1) \
                     and ir_curr == 1:  # a lot left
-                self.setvel(0.3, 80)
+                motors.setvel(0.3, 60)
 
             elif (ir_old == 2 or ir_old == 6 or ir_old == 4) \
                     and ir_curr == 4:  # a lot right
-                self.setvel(0.3, -80)
+                motors.setvel(0.3, -60)
 
             elif ir_curr == 0:  # past end
-                if ir_old == 4:
+                if cur_dist[0] < mindist and cur_dist[2] < mindist:     #going through a tunnel
+                    while ir_curr == 0:
+                        motors.setvel(0.25, 0)
+
+                elif ir_old == 4:
                     self.lost(4)
                     ir_curr = self.ircheck()
                 else:
@@ -328,11 +327,17 @@ class Motor:
             elif ir_curr == 7:
                 # drive straight to get axels over intersection
                 self.setvel(0.2, 0)
-                time.sleep(0.4)
+                time.sleep(0.45)
                 self.setvel(0, 0)
-                break
+                return True
             # update past IR status
             ir_old = ir_curr
+
+        if cur_dist[1] < 0.15:
+            #turn around
+            self.turnto(2)
+            self.drive()
+            return False
 
     def turn(self, dir):
         global heading
@@ -340,7 +345,7 @@ class Motor:
         if dir == 1 or dir == -3:
             new_dir = 1
             self.setvel(0, -360)
-            time.sleep(.4)
+            time.sleep(.38)
         if dir == 2 or dir == -2:
             new_dir = 2
             self.setvel(0, -360)
@@ -348,108 +353,91 @@ class Motor:
         if dir == 3 or dir == -1:
             new_dir = 3
             self.setvel(0, 360)
-            time.sleep(.36)
+            time.sleep(.38)
 
         self.setvel(0, 0)
         time.sleep(1)
         # update heading
         heading = (heading + new_dir) % 4
-    
-    
+
+
     def turnto(self, dir):
         global heading
         new_dir = dir
         if dir == 1 or dir == -3:
-            new_dir =1
+            new_dir = 1
             self.setvel(0, -360)
             time.sleep(.30)
             while self.ircheck() != 2:
-                self.setvel(0,-200)
+                self.setvel(0, -200)
         if dir == 2 or dir == -2:
             new_dir = 2
             self.setvel(0, -360)
             time.sleep(.70)
             while self.ircheck() != 2:
-                self.setvel(0,-200)
-        
+                self.setvel(0, -200)
+
         if dir == 3 or dir == -1:
-            new_dir=3
+            new_dir = 3
             self.setvel(0, 360)
             time.sleep(.30)
             while self.ircheck() != 2:
                 self.setvel(0, 200)
-        
-        
+
         self.setvel(0, 0)
         time.sleep(1)
-        #update heading
+        # update heading
         heading = (heading + new_dir) % 4
-        
-        
-    def goHome(self):
-        global long
-        global lat
-        global heading
 
-        if long == 0 and lat == 0:
-            print('made it home!')
-            return
-        while True:
-            for i in reversed(range(len(turnstaken))):
-                self.turn(turnstaken[i] - heading)
-                self.drive()
-                [long, lat] = shift(long, lat, heading)
-                print(long, lat)
-                if long == 0 and lat == 0:
-                    print('made it home!')
-                    return
 
     def sample(self):  # find number of streets coming from an intersection
         results = [False, False, False, False]
         self.setvel(0, 0)
         time.sleep(1.0)
-        
+        self.turn(1)
+        if cur_dist[0] < mindist and cur_dist[2] < mindist: #still in a tunnel
+            results[heading] = True
+            results[(heading+2) % 4] = True
+            return results
+        if self.ircheck() != 0:
+            while self.ircheck() != 2:
+                if self.ircheck() == 3 or self.ircheck() == 1:  # drifted left
+                    self.setvel(0, 200)
+
+                else:  # drifted right
+                    self.setvel(0, -200)
+
+            self.setvel(0, 0)
+            time.sleep(0.2)
+
+            results[heading] = True
+
+        self.turn(3)
+        if self.ircheck() != 0:
+            while self.ircheck() != 2:
+                if self.ircheck() == 3 or self.ircheck() == 1:  # drifted left
+                    self.setvel(0, 200)
+
+                else:  # drifted right
+                    self.setvel(0, -200)
+            self.setvel(0, 0)
+            time.sleep(0.2)
+            results[heading] = True
+
+        self.turn(3)
+        if self.ircheck() != 0:
+            while self.ircheck() != 2:
+                if self.ircheck() == 3 or self.ircheck() == 1:  # drifted left
+                    self.setvel(0, 200)
+
+                else:  # drifted right
+                    self.setvel(0, -200)
+            self.setvel(0, 0)
+            time.sleep(0.2)
+            results[heading] = True
+
+        self.turn(1)
         results[(heading + 2) % 4] = True
-        
-        self.turn(1)
-        if self.ircheck() != 0:
-            while self.ircheck() != 2:
-                if self.ircheck() == 3 or self.ircheck() == 1:  # drifted left
-                    self.setvel(0, 200)
-
-                else:  # drifted right
-                    self.setvel(0, -200)
-
-            self.setvel(0, 0)
-            time.sleep(0.2)
-
-            results[heading] = True
-
-        self.turn(3)
-        if self.ircheck() != 0:
-            while self.ircheck() != 2:
-                if self.ircheck() == 3 or self.ircheck() == 1:  # drifted left
-                    self.setvel(0, 200)
-
-                else:  # drifted right
-                    self.setvel(0, -200)
-            self.setvel(0, 0)
-            time.sleep(0.2)
-            results[heading] = True
-
-        self.turn(3)
-        if self.ircheck() != 0:
-            while self.ircheck() != 2:
-                if self.ircheck() == 3 or self.ircheck() == 1:  # drifted left
-                    self.setvel(0, 200)
-
-                else:  # drifted right
-                    self.setvel(0, -200)
-            self.setvel(0, 0)
-            time.sleep(0.2)
-            results[heading] = True
-
-        self.turn(1)
 
         return results
 
@@ -466,31 +454,30 @@ class Motor:
         # global intersections
         global long
         global lat
-        global pausedriving
         for i in intersections:
             i.headingToTarget = None
         unprocessed = []
         curr = intersection(targetlong, targetlat)
         while curr.lat != lat or curr.long != long:
-            if curr.streets[0] == CONNECTED:
+            if curr.streets[0] == CONNECTED and curr.blocked[0] == False:
                 new = intersection(curr.long, curr.lat + 1)
                 if new.headingToTarget == None:
                     unprocessed.append(new)
                     new.headingToTarget = ((0 + 2) % 4)
 
-            if curr.streets[1] == CONNECTED:
+            if curr.streets[1] == CONNECTED and curr.blocked[1] == False:
                 new = intersection(curr.long - 1, curr.lat)
                 if new.headingToTarget == None:
                     unprocessed.append(new)
                     new.headingToTarget = ((1 + 2) % 4)
 
-            if curr.streets[2] == CONNECTED:
+            if curr.streets[2] == CONNECTED and curr.blocked[2] == False:
                 new = intersection(curr.long, curr.lat - 1)
                 if new.headingToTarget == None:
                     unprocessed.append(new)
                     new.headingToTarget = ((2 + 2) % 4)
 
-            if curr.streets[3] == CONNECTED:
+            if curr.streets[3] == CONNECTED and curr.blocked[3] == False:
                 new = intersection(curr.long + 1, curr.lat)
                 if new.headingToTarget == None:
                     unprocessed.append(new)
@@ -499,18 +486,27 @@ class Motor:
             curr = unprocessed.pop(0)
 
         # follow to target
-        while long != targetlong or lat != targetlat:
+        if long != targetlong or lat != targetlat:
             inter = intersection(long, lat)
             print(repr(inter))
-            self.turnto(inter.headingToTarget - heading)
-            self.drive()
-            time.sleep(0.5)
-            [long, lat] = shift(long, lat, heading)
+            self.turn(inter.headingToTarget - heading)
+            if self.drive():
+                time.sleep(0.5)
+                [long, lat] = shift(long, lat, heading)
+            update_blocks(inter)
+            self.toTarget(targetlong, targetlat)
 
-        pausedriving = True
         #self.setvel(0, 0)
+        driving_pause = True
 
         # New longitude/latitude value after a step in the given heading.
+
+
+def update_blocks(inter):
+    inter.blocked[(heading+2)%4] = False    # road came from is not blocked
+    for i in range(3):
+        if cur_dist[i] < mindist:
+            inter.blocked[(heading-i+1) % 4] = True
 
 
 def shift(long, lat, heading):
@@ -535,37 +531,39 @@ def intersection(long, lat):
         raise Exception("Multiple intersections at (%2d,%2d)" % (long, lat))
     return list[0]
 
+
 def triggering_stop():
-    global trigger_stopflag
-    trigger_stopflag = True
-    
+    global triggering_stopflag
+    triggering_stopflag = True
+
+
 def triggering_loop(ultra1, ultra2, ultra3):
-    global trigger_stopflag
-    
-    trigger_stopflag = False
-    
-    while not trigger_stopflag:
+    global triggering_stopflag
+    triggering_stopflag = False
+    while not triggering_stopflag:
         ultra1.trigger()
         ultra2.trigger()
         ultra3.trigger()
-        #time.sleep(2)
+        # time.sleep(2)
         time.sleep(0.08 + 0.04 * random.random())
-     
-#driving thread
+
+
 def driving_stop():
     global driving_stopflag
     driving_stopflag = True
 
+
 def driving_loop(motors):
-    global exploreflag
-    global pausedriving
     global driving_stopflag
-    global long, lat, lastintersection, turnstaken
+    global driving_pause
+    global lastintersection
+    global exploreflag
+    global long, lat
     driving_stopflag = False
     while not driving_stopflag:
-        if pausedriving:
+        if driving_pause:
             continue
-        ir_old = motors.ircheck()    
+        ir_old = motors.ircheck()
         if exploreflag:
             motors.drive()
             [long, lat] = shift(long, lat, heading)
@@ -576,71 +574,86 @@ def driving_loop(motors):
                     if temp[i] == True:
                         inter.streets[i] = UNEXPLORED
                     else:
-                        inter.streets[i] = NOSTREET                   
+                        inter.streets[i] = NOSTREET
+                update_blocks(inter)
             else:
                 inter = intersection(long, lat)
-                
+                update_blocks(inter)
+
             if lastintersection != None:
                 lastintersection.streets[heading] = CONNECTED
-                inter.streets[(heading+2)%4] = CONNECTED
-                inter.headingToTarget = (heading+2)%4
+                inter.streets[(heading + 2) % 4] = CONNECTED
+                inter.headingToTarget = (heading + 2) % 4
                 turnstaken.append(inter.headingToTarget)
             streetind = []
             streetcnct = []
             for i in range(len(inter.streets)):
-                if inter.streets[(heading+i)%4] == UNEXPLORED:
-                    streetind.append((heading+i)%4)
-                elif inter.streets[(heading+i)%4] == CONNECTED:
-                    streetcnct.append((heading+i)%4)
+                if inter.streets[(heading + i) % 4] == UNEXPLORED and not inter.blocked[(heading+i) % 4]:
+                    streetind.append((heading + i) % 4)
+                elif inter.streets[(heading + i) % 4] == CONNECTED:
+                    streetcnct.append((heading + i) % 4)
             if len(streetind) == 0:
-                #check for any unexplored streets on the map
+                # check for any unexplored streets on the map
                 tar = motors.unexplored()
                 if tar != None:
                     motors.toTarget(tar.long, tar.lat)
                     i_unex = tar.streets.index(UNEXPLORED)
                     inter = tar
                     motors.turnto(i_unex - heading)
-                    
+
                 else:
                     exploreflag = False
+
             else:
-                motors.turnto(streetind[0]-heading)
+                motors.turnto(streetind[0] - heading)
+
             print(repr(inter))
             lastintersection = inter
-            
-        if not exploreflag:
-            motors.setvel(0,0)
+
+        else:
+            motors.setvel(0, 0)
             lo = int(input("enter target long: "))
             la = int(input("enter target lat: "))
             if intersection(lo, la) == None:
-                raise Exception("No intersections at (%2d,%2d)" %(lo, la))
-            
+                #raise Exception("No intersections at (%2d,%2d)" % (lo, la))
+                closestint = intersections[0]
+                closestdist = abs(lo-intersections[0].long) + abs(la-intersections[0].lat)
+                for i in range(len(intersections)):
+                    tempdis = abs(lo-intersections[i].long) + abs(la-intersections[i].lat)
+                    if tempdis < closestdist:
+                        closestint = intersections[i]
+                lo = closestint.long
+                la = closestint.lat
             motors.toTarget(lo, la)
-    
-def userinput():     
+
+
+def userinput():
+    global driving_pause
     global exploreflag
-    global pausedriving
     while True:
-        # Grab a command
-        command = input('Command ? ')
-        # Compare against possible commands.
-        if (command == 'pause'):
-            print("Pausing at the next intersection")
-            pausedriving = True
+        command = input("Command? ")
+        if(command == 'pause'):
+            print("Pausing at next intersection")
+            driving_pause = True
+
         elif (command == 'explore'):
-            print("Exploring without a target")
+            print("Exploring without target")
+            driving_pause = False
             exploreflag = True
-            pausedriving = False
+
         elif (command == 'goto'):
             print("Driving to a target")
+            driving_pause = False
             exploreflag = False
-            pausedriving = False
-       # elif (command == 'print'):
-        #    print(map)
-            #... and/or useful debug values?
-        elif (command == 'quit'):
-            print("Quitting...")
+
+        elif (command == 'print'):
+            print("Current Location")
+            print(repr(intersection(long, lat)))
+
+        elif(command == 'quit'):
+            print("Quitting")
             break
+
         else:
             print("Unknown command '%s'" % command)
 
@@ -649,73 +662,30 @@ def userinput():
 #   Main
 #
 if __name__ == "__main__":
-    
+
     io = pigpio.pi()
     motors = Motor(io)
-        
+
     ultra1 = Ultrasonic(io, CHANNEL_TRIGGER_1, CHANNEL_ECHO_1, 1)
     ultra2 = Ultrasonic(io, CHANNEL_TRIGGER_2, CHANNEL_ECHO_2, 2)
     ultra3 = Ultrasonic(io, CHANNEL_TRIGGER_3, CHANNEL_ECHO_3, 3)
 
-    
-    triggering_thread = threading.Thread(target=triggering_loop,args=(ultra1, ultra2, ultra3))
+    triggering_thread = threading.Thread(target=triggering_loop, args=(ultra1, ultra2, ultra3))
     triggering_thread.start()
-    driving_thread = threading.Thread(target = driving_loop, args = (motors,))
+    driving_thread = threading.Thread(target = driving_loop, args= (motors,))
     driving_thread.start()
-    
+
     try:
-        
         userinput()
-        #driving_loop(motors)
-        #lst = []
-        #i = 0
-        #avg_dist = cur_dist[1]
-#         ir_old = motors.ircheck()
-#             
-#         
-#         while True:
-#             
-#             print(cur_dist)
-#             
-#             d = cur_dist[2]
-#             d_des = 20
-#             e = d - d_des
-#             k = 0.015
-#             u = -k*e
-#             PWMleft = max(0.5, min(0.9, 0.7 - u))
-#             PWMright = max(0.5, min(0.9, 0.7+u)) + 0.025
-#             print(PWMleft)
-#             print(PWMright)
-#             motors.set(PWMleft, PWMright)
-#             
-#             
-#             if cur_dist[1] <= 20:
-#                 print('too close')
-#                 motors.setvel(-0.2,0)   
-#             elif cur_dist[0] <= 20 and cur_dist[2] > 20:
-#                 motors.setvel(0.2, 180)
-#             elif cur_dist[0] > 20 and cur_dist[2] <= 20:
-#                 motors.setvel(0.2, -180)
-#             elif cur_dist[0] <= 20 and cur_dist[2] <= 20:
-#                 motors.setvel(0.2, 0)
-#                 
-#             else:
-#                 print('go')
-#                 motors.setvel(0.2, 0)
-        
-            
-    
+
     except BaseException as ex:
         print("Ending due to exception: %s" % repr(ex))
-        traceback.print_exc()
-    
-    
+
     triggering_stop()
     triggering_thread.join()
-    
     driving_stop()
     driving_thread.join()
-    
+
     print('motor shutdown')
     motors.shutdown()
 
