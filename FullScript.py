@@ -290,7 +290,11 @@ class Motor:
     # drive forward until you see an intersection
     def drive(self):
         ir_old = self.ircheck()
+<<<<<<< HEAD
         while cur_dist[1] > mindist:
+=======
+        while cur_dist[1] < mindist:
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
             # read sensors
             ir_curr = self.ircheck()
 
@@ -496,8 +500,12 @@ class Motor:
             update_blocks(inter)
             self.toTarget(targetlong, targetlat)
 
+<<<<<<< HEAD
         #self.setvel(0, 0)
         driving_pause = True
+=======
+        self.setvel(0, 0)
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
 
         # New longitude/latitude value after a step in the given heading.
 
@@ -557,16 +565,25 @@ def driving_loop(motors):
     global driving_stopflag
     global driving_pause
     global lastintersection
+<<<<<<< HEAD
     global exploreflag
+=======
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
     global long, lat
     driving_stopflag = False
     while not driving_stopflag:
         if driving_pause:
             continue
+<<<<<<< HEAD
         ir_old = motors.ircheck()
         if exploreflag:
             motors.drive()
             [long, lat] = shift(long, lat, heading)
+=======
+        if exploreflag:
+            if motors.drive():
+                [long, lat] = shift(long, lat, heading)
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
             if intersection(long, lat) == None:
                 inter = Intersection(long, lat)
                 temp = motors.sample()
@@ -615,6 +632,7 @@ def driving_loop(motors):
             lo = int(input("enter target long: "))
             la = int(input("enter target lat: "))
             if intersection(lo, la) == None:
+<<<<<<< HEAD
                 #raise Exception("No intersections at (%2d,%2d)" % (lo, la))
                 closestint = intersections[0]
                 closestdist = abs(lo-intersections[0].long) + abs(la-intersections[0].lat)
@@ -624,12 +642,18 @@ def driving_loop(motors):
                         closestint = intersections[i]
                 lo = closestint.long
                 la = closestint.lat
+=======
+                raise Exception("No intersections at (%2d,%2d)" % (lo, la))
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
             motors.toTarget(lo, la)
 
 
 def userinput():
+<<<<<<< HEAD
     global driving_pause
     global exploreflag
+=======
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
     while True:
         command = input("Command? ")
         if(command == 'pause'):
@@ -646,7 +670,11 @@ def userinput():
             driving_pause = False
             exploreflag = False
 
+<<<<<<< HEAD
         elif (command == 'print'):
+=======
+        elif (command == 'goto'):
+>>>>>>> f1436d72b81850573a0381364a4ecee5d10619a8
             print("Current Location")
             print(repr(intersection(long, lat)))
 

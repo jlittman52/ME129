@@ -69,6 +69,9 @@ clearflag = False
 cur_dist = [0,0,0]
 mindist = 30
 
+gotolong = 0
+gotolat = 0
+
 class Intersection:
     # Initialize - create new intersection at (long, let)
     def __init__(self, long, lat):
@@ -137,7 +140,6 @@ class Ultrasonic:
         time.sleep(0.000020)
         self.io.write(self.trig, 0)
         last_trigger = time.time
-        
         
 
     def shutdown(self):
@@ -341,7 +343,7 @@ class Motor:
         if dir == 1 or dir == -3:
             new_dir = 1
             self.setvel(0, -360)
-            time.sleep(.4)
+            time.sleep(.43)
         if dir == 2 or dir == -2:
             new_dir = 2
             self.setvel(0, -360)
@@ -472,11 +474,13 @@ class Motor:
         global long
         global lat
         global pausedriving
+        global lastintersection
         for i in intersections:
             i.headingToTarget = None
         unprocessed = []
         curr = intersection(targetlong, targetlat)
         while curr.lat != lat or curr.long != long:
+            print(repr(curr))
             if curr.streets[0] == CONNECTED:
                 new = intersection(curr.long, curr.lat + 1)
                 if new.headingToTarget == None:
@@ -501,12 +505,24 @@ class Motor:
                     unprocessed.append(new)
                     new.headingToTarget = ((3 + 2) % 4)
 
+            if len(unprocessed) == 0:
+                print("no path found")
+                return
+            
             curr = unprocessed.pop(0)
 
         # follow to target
-        while long != targetlong or lat != targetlat:
+        if long != targetlong or lat != targetlat:
             inter = intersection(long, lat)
             print('b')
+            
+            self.turnto(inter.headingToTarget - heading)
+            self.drive()
+            time.sleep(0.5)
+            
+            [long, lat] = shift(long, lat, heading)
+            inter = intersection(long,lat)
+            
             bl = self.obs_sample()
             for i in range(4):
                 if inter.streets != NOSTREET:
@@ -515,17 +531,15 @@ class Motor:
                         inter.streets[i] = BLOCKED
                     else:
                         print('c')
-                        #if inter.streets[i] == BLOCKED:
-                        inter.streets[i] = CONNECTED
-            print(repr(inter))
-            self.turnto(inter.headingToTarget - heading)
-            self.drive()
-            time.sleep(0.5)
-            [long, lat] = shift(long, lat, heading)
+                        if inter.streets[i] == BLOCKED:
+                            inter.streets[i] = UNEXPLORED
+            
+            print(repr(inter))            
             self.toTarget(targetlong, targetlat)
-
-        #pausedriving = True
+            
+        lastintersection = intersection(long, lat)
         #self.setvel(0, 0)
+        #pausedriving = True
 
         # New longitude/latitude value after a step in the given heading.
 
@@ -577,7 +591,7 @@ def driving_loop(motors):
     global exploreflag
     global pausedriving
     global driving_stopflag
-    global long, lat, lastintersection, turnstaken, intersections, heading
+    global long, lat, lastintersection, turnstaken, intersections, heading, gotolong, gotolat
     driving_stopflag = False
     while not driving_stopflag:
         if pausedriving:
@@ -633,11 +647,13 @@ def driving_loop(motors):
                 tar = motors.unexplored()
                 if tar != None:
                     motors.toTarget(tar.long, tar.lat)
+                    print("target ",repr(tar))
                     i_unex = tar.streets.index(UNEXPLORED)
                     inter = tar
                     motors.turnto(i_unex - heading)
                 else:
-                    exploreflag = False
+                    pausedriving = True
+                    
             else:
                 motors.turnto(streetind[0]-heading)
             print(repr(inter))
@@ -645,10 +661,12 @@ def driving_loop(motors):
             
         if not exploreflag:
             motors.setvel(0,0)
-            coord = input("Enter target coordinates in the form long,lat: ")
-            res = coord.split(',')
-            lo = int(res[0])
-            la = int(res[1])
+#             coord = input("Enter target coordinates in the form long,lat: ")
+#             res = coord.split(',')
+#             lo = int(res[0])
+#             la = int(res[1])
+            lo = gotolong
+            la = gotolat
             if intersection(lo, la) == None:
                 #raise Exception("No intersections at (%2d,%2d)" %(lo, la))
                 #instead of raising exception now, it goes to the closest intersection to the target and keeps exploring
@@ -667,6 +685,7 @@ def userinput():
     global exploreflag
     global pausedriving
     global clearflag
+    global gotolong, gotolat
     while True:
         # Grab a command
         command = input('Command ? ')
@@ -680,6 +699,10 @@ def userinput():
             pausedriving = False
         elif (command == 'goto'):
             print("Driving to a target")
+            temp = input('Enter coordinates in the form long,lat: ')
+            res = temp.split(',')
+            gotolong = int(res[0])
+            gotolat = int(res[1])
             exploreflag = False
             pausedriving = False
         elif (command == 'rezero'):
