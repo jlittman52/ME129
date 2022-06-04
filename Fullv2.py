@@ -69,9 +69,12 @@ clearflag = False
 cur_dist = [0,0,0]
 mindist = 30
 
+<<<<<<< HEAD
 gotolong = 0
 gotolat = 0
 
+=======
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
 class Intersection:
     # Initialize - create new intersection at (long, let)
     def __init__(self, long, lat):
@@ -141,6 +144,10 @@ class Ultrasonic:
         self.io.write(self.trig, 0)
         last_trigger = time.time
         
+<<<<<<< HEAD
+=======
+        
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
 
     def shutdown(self):
         self.cbrise.cancel()
@@ -343,7 +350,11 @@ class Motor:
         if dir == 1 or dir == -3:
             new_dir = 1
             self.setvel(0, -360)
+<<<<<<< HEAD
             time.sleep(.43)
+=======
+            time.sleep(.4)
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
         if dir == 2 or dir == -2:
             new_dir = 2
             self.setvel(0, -360)
@@ -474,13 +485,19 @@ class Motor:
         global long
         global lat
         global pausedriving
+<<<<<<< HEAD
         global lastintersection
+=======
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
         for i in intersections:
             i.headingToTarget = None
         unprocessed = []
         curr = intersection(targetlong, targetlat)
         while curr.lat != lat or curr.long != long:
+<<<<<<< HEAD
             print(repr(curr))
+=======
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
             if curr.streets[0] == CONNECTED:
                 new = intersection(curr.long, curr.lat + 1)
                 if new.headingToTarget == None:
@@ -505,6 +522,7 @@ class Motor:
                     unprocessed.append(new)
                     new.headingToTarget = ((3 + 2) % 4)
 
+<<<<<<< HEAD
             if len(unprocessed) == 0:
                 print("no path found")
                 return
@@ -523,6 +541,14 @@ class Motor:
             [long, lat] = shift(long, lat, heading)
             inter = intersection(long,lat)
             
+=======
+            curr = unprocessed.pop(0)
+
+        # follow to target
+        while long != targetlong or lat != targetlat:
+            inter = intersection(long, lat)
+            print('b')
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
             bl = self.obs_sample()
             for i in range(4):
                 if inter.streets != NOSTREET:
@@ -531,6 +557,7 @@ class Motor:
                         inter.streets[i] = BLOCKED
                     else:
                         print('c')
+<<<<<<< HEAD
                         if inter.streets[i] == BLOCKED:
                             inter.streets[i] = UNEXPLORED
             
@@ -540,6 +567,19 @@ class Motor:
         lastintersection = intersection(long, lat)
         #self.setvel(0, 0)
         #pausedriving = True
+=======
+                        #if inter.streets[i] == BLOCKED:
+                        inter.streets[i] = CONNECTED
+            print(repr(inter))
+            self.turnto(inter.headingToTarget - heading)
+            self.drive()
+            time.sleep(0.5)
+            [long, lat] = shift(long, lat, heading)
+            self.toTarget(targetlong, targetlat)
+
+        #pausedriving = True
+        #self.setvel(0, 0)
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
 
         # New longitude/latitude value after a step in the given heading.
 
@@ -591,7 +631,11 @@ def driving_loop(motors):
     global exploreflag
     global pausedriving
     global driving_stopflag
+<<<<<<< HEAD
     global long, lat, lastintersection, turnstaken, intersections, heading, gotolong, gotolat
+=======
+    global long, lat, lastintersection, turnstaken, intersections, heading
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
     driving_stopflag = False
     while not driving_stopflag:
         if pausedriving:
@@ -647,13 +691,20 @@ def driving_loop(motors):
                 tar = motors.unexplored()
                 if tar != None:
                     motors.toTarget(tar.long, tar.lat)
+<<<<<<< HEAD
                     print("target ",repr(tar))
+=======
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
                     i_unex = tar.streets.index(UNEXPLORED)
                     inter = tar
                     motors.turnto(i_unex - heading)
                 else:
+<<<<<<< HEAD
                     pausedriving = True
                     
+=======
+                    exploreflag = False
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
             else:
                 motors.turnto(streetind[0]-heading)
             print(repr(inter))
@@ -661,12 +712,19 @@ def driving_loop(motors):
             
         if not exploreflag:
             motors.setvel(0,0)
+<<<<<<< HEAD
 #             coord = input("Enter target coordinates in the form long,lat: ")
 #             res = coord.split(',')
 #             lo = int(res[0])
 #             la = int(res[1])
             lo = gotolong
             la = gotolat
+=======
+            coord = input("Enter target coordinates in the form long,lat: ")
+            res = coord.split(',')
+            lo = int(res[0])
+            la = int(res[1])
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
             if intersection(lo, la) == None:
                 #raise Exception("No intersections at (%2d,%2d)" %(lo, la))
                 #instead of raising exception now, it goes to the closest intersection to the target and keeps exploring
@@ -685,7 +743,10 @@ def userinput():
     global exploreflag
     global pausedriving
     global clearflag
+<<<<<<< HEAD
     global gotolong, gotolat
+=======
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
     while True:
         # Grab a command
         command = input('Command ? ')
@@ -699,10 +760,13 @@ def userinput():
             pausedriving = False
         elif (command == 'goto'):
             print("Driving to a target")
+<<<<<<< HEAD
             temp = input('Enter coordinates in the form long,lat: ')
             res = temp.split(',')
             gotolong = int(res[0])
             gotolat = int(res[1])
+=======
+>>>>>>> e28877b20574fb2288cea4f8f70c7a2b0b4eb464
             exploreflag = False
             pausedriving = False
         elif (command == 'rezero'):
